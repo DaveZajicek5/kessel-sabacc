@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "simulate": "tsx scripts/simulate.ts"
+    "simulate": "tsx scripts/simulate.ts",
+    "audit:first-round": "tsx scripts/audit-first-round.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "6.0.3",
