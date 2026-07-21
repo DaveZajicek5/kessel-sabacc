@@ -82,11 +82,11 @@ function randomLegalDecision(state: GameState): { decision: AiDecision; randomSt
   }
   const options: AiDecision[] = [
     { kind: 'stand', explanation: 'A deliberately unpredictable stand.' },
-    { kind: 'draw', family: 'blood', source: 'draw', explanation: 'A chaotic draw.' },
-    { kind: 'draw', family: 'sand', source: 'draw', explanation: 'A chaotic draw.' },
-    { kind: 'draw', family: 'blood', source: 'discard', explanation: 'A chaotic grab.' },
-    { kind: 'draw', family: 'sand', source: 'discard', explanation: 'A chaotic grab.' },
   ];
+  if (state.piles.bloodDraw.length > 0) options.push({ kind: 'draw', family: 'blood', source: 'draw', explanation: 'A chaotic draw.' });
+  if (state.piles.sandDraw.length > 0) options.push({ kind: 'draw', family: 'sand', source: 'draw', explanation: 'A chaotic draw.' });
+  if (state.piles.bloodDiscard.length > 0) options.push({ kind: 'draw', family: 'blood', source: 'discard', explanation: 'A chaotic grab.' });
+  if (state.piles.sandDiscard.length > 0) options.push({ kind: 'draw', family: 'sand', source: 'discard', explanation: 'A chaotic grab.' });
   const roll = randomInt(state.randomState, 0, options.length - 1);
   return { decision: options[roll.value], randomState: roll.state };
 }
@@ -112,31 +112,35 @@ export function chooseAiDecision(state: GameState): { decision: AiDecision; rand
 
   for (const family of ['blood', 'sand'] as const) {
     const discard = getTopDiscard(state, family);
-    const known = knownImprovement(player, family, discard, profile);
-    const knownNoise = nextRandom(randomState);
-    randomState = knownNoise.state;
-    candidates.push({
-      decision: {
-        kind: 'draw',
-        family,
-        source: 'discard',
-        explanation: known > 12 ? 'The visible card creates a major improvement.' : 'The visible card is worth the token risk.',
-      },
-      score: known + profile.exploration - cost + (knownNoise.value - 0.5) * profile.noise * difficulty.noise,
-    });
+    if (discard) {
+      const known = knownImprovement(player, family, discard, profile);
+      const knownNoise = nextRandom(randomState);
+      randomState = knownNoise.state;
+      candidates.push({
+        decision: {
+          kind: 'draw',
+          family,
+          source: 'discard',
+          explanation: known > 12 ? 'The visible card creates a major improvement.' : 'The visible card is worth the token risk.',
+        },
+        score: known + profile.exploration - cost + (knownNoise.value - 0.5) * profile.noise * difficulty.noise,
+      });
+    }
 
-    const expected = expectedDrawImprovement(state, player, family, profile);
-    const drawNoise = nextRandom(randomState);
-    randomState = drawNoise.state;
-    candidates.push({
-      decision: {
-        kind: 'draw',
-        family,
-        source: 'draw',
-        explanation: 'The unknown-card odds justify a draw.',
-      },
-      score: expected + profile.exploration - cost + (drawNoise.value - 0.5) * profile.noise * difficulty.noise,
-    });
+    if (state.piles[`${family}Draw`].length > 0) {
+      const expected = expectedDrawImprovement(state, player, family, profile);
+      const drawNoise = nextRandom(randomState);
+      randomState = drawNoise.state;
+      candidates.push({
+        decision: {
+          kind: 'draw',
+          family,
+          source: 'draw',
+          explanation: 'The unknown-card odds justify a draw.',
+        },
+        score: expected + profile.exploration - cost + (drawNoise.value - 0.5) * profile.noise * difficulty.noise,
+      });
+    }
   }
 
   const currentStrength = handStrength(player.hand);

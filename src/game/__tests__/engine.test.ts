@@ -30,19 +30,33 @@ describe('game engine', () => {
     expect(state.turn).toBe(1);
   });
 
-  it('allows taking a singleton discard with the last token without crashing', () => {
+  it('keeps a singleton discard visible while spending the last token', () => {
     const created = createGame({ opponentCount: 1, startingTokens: 1, difficulty: 'standard', seed: 3 });
     const initial = { ...created, startingSeat: 0, currentPlayerId: 'human' };
-    expect(initial.piles.bloodDiscard).toHaveLength(1);
+    const visible = getTopDiscard(initial, 'blood')!;
 
     const drawing = beginDraw(initial, 'blood', 'discard');
     const humanDuringDraw = drawing.players.find((player) => player.id === 'human')!;
     expect(drawing.phase).toBe('draw-decision');
     expect(humanDuringDraw.stock).toBe(0);
-    expect(getTopDiscard(drawing, 'blood')).toEqual(drawing.pendingDraw?.card);
+    expect(drawing.piles.bloodDiscard).toHaveLength(1);
+    expect(getTopDiscard(drawing, 'blood')).toEqual(visible);
+    expect(drawing.pendingDraw?.card).toEqual(visible);
 
     const after = finishDraw(drawing, true);
     expect(after.piles.bloodDiscard).toHaveLength(1);
-    expect(getTopDiscard(after, 'blood')).toBeDefined();
+    expect(getTopDiscard(after, 'blood')?.id).not.toBe(visible.id);
+  });
+
+  it('leaves a visible discard unchanged when it is refused', () => {
+    const created = createGame({ opponentCount: 1, startingTokens: 2, difficulty: 'standard', seed: 4 });
+    const initial = { ...created, startingSeat: 0, currentPlayerId: 'human' };
+    const visible = getTopDiscard(initial, 'sand')!;
+
+    const drawing = beginDraw(initial, 'sand', 'discard');
+    const after = finishDraw(drawing, false);
+
+    expect(after.piles.sandDiscard).toHaveLength(1);
+    expect(getTopDiscard(after, 'sand')).toEqual(visible);
   });
 });
