@@ -90,4 +90,20 @@ describe('game engine', () => {
     expect(takeDiscard(initial, family).phase).toBe('player-action');
   });
 
+
+  it.each(['blood', 'sand'] as const)('recovers when the current player is last but action history is incomplete for %s discard', (family) => {
+    const created = createGame({ opponentCount: 3, startingTokens: 3, difficulty: 'standard', seed: 77 });
+    const malformed = {
+      ...created,
+      startingSeat: 1,
+      currentPlayerId: 'human',
+      actedThisTurn: [],
+      stoodThisTurn: [],
+    };
+
+    const after = takeDiscard(malformed, family);
+    expect(after.players.some((player) => player.id === after.currentPlayerId)).toBe(true);
+    expect(after.currentPlayerId).not.toBe('human');
+  });
+
 });

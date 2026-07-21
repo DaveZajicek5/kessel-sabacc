@@ -191,12 +191,20 @@ function beginResolution(state: GameState, reason: string): GameState {
 
 function completeAction(state: GameState, kind: 'stand' | 'draw'): GameState {
   const playerId = state.currentPlayerId;
-  const actedThisTurn = [...state.actedThisTurn, playerId];
-  const stoodThisTurn = kind === 'stand' ? [...state.stoodThisTurn, playerId] : state.stoodThisTurn;
   const order = clockwiseOrder(state.players, state.startingSeat);
+  if (order.length === 0) return state;
 
-  if (actedThisTurn.length === order.length) {
-    if (stoodThisTurn.length === order.length) {
+  const actedIds = new Set([...state.actedThisTurn, playerId]);
+  const stoodIds = new Set(state.stoodThisTurn);
+  if (kind === 'stand') stoodIds.add(playerId);
+
+  // Keep histories unique and in table order. Duplicate browser events or a stale
+  // action history must never make currentPlayerId become undefined.
+  const actedThisTurn = order.filter((player) => actedIds.has(player.id)).map((player) => player.id);
+  const stoodThisTurn = order.filter((player) => stoodIds.has(player.id)).map((player) => player.id);
+
+  if (actedThisTurn.length >= order.length) {
+    if (stoodThisTurn.length >= order.length) {
       return beginResolution(
         { ...state, actedThisTurn, stoodThisTurn },
         `Everyone stood on turn ${state.turn}; the round ends early.`,
@@ -219,12 +227,46 @@ function completeAction(state: GameState, kind: 'stand' | 'draw'): GameState {
   }
 
   const currentIndex = order.findIndex((player) => player.id === playerId);
+  const traversal = currentIndex >= 0
+    ? [...order.slice(currentIndex + 1), ...order.slice(0, currentIndex + 1)]
+    : order;
+  const nextPlayer = traversal.find((player) => !actedIds.has(player.id));
+
+  // This should be unreachable, but retaining a valid current player is safer
+  // than throwing during React's state update/render cycle.
+  if (!nextPlayer) {
+    return {
+      ...state,
+      actedThisTurn,
+      stoodThisTurn,
+      currentPlayerId: order[0].id,
+      log: [...state.log, 'Turn order recovered from an inconsistent action history.'].slice(-60),
+    };
+  }
+
   return {
     ...state,
     actedThisTurn,
     stoodThisTurn,
-    currentPlayerId: order[currentIndex + 1].id,
+    currentPlayerId: nextPlayer.id,
   };
+}
+
+export function assertValidGameState(state: GameState): void {
+  if (!Array.isArray(state.players) || state.players.length === 0) {
+    throw new Error('Game state has no players');
+  }
+  if (!state.players.some((player) => player.id === state.currentPlayerId)) {
+    throw new Error(`Current player ${state.currentPlayerId} is missing`);
+  }
+  for (const player of state.players) {
+    if (!player.hand?.blood || !player.hand?.sand) {
+      throw new Error(`Player ${player.id} has an incomplete hand`);
+    }
+  }
+  for (const key of ['bloodDraw', 'sandDraw', 'bloodDiscard', 'sandDiscard'] as const) {
+    if (!Array.isArray(state.piles[key])) throw new Error(`Pile ${key} is invalid`);
+  }
 }
 
 export function stand(state: GameState): GameState {
