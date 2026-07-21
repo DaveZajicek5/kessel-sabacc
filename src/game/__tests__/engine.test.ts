@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beginDraw, createGame, finishDraw, stand } from '../engine';
+import { beginDraw, createGame, finishDraw, getTopDiscard, stand } from '../engine';
 
 describe('game engine', () => {
   it('builds 22-card family decks into valid opening piles', () => {
@@ -28,5 +28,21 @@ describe('game engine', () => {
     state = stand(state);
     expect(state.phase).toBe('resolution-choice');
     expect(state.turn).toBe(1);
+  });
+
+  it('allows taking a singleton discard with the last token without crashing', () => {
+    const created = createGame({ opponentCount: 1, startingTokens: 1, difficulty: 'standard', seed: 3 });
+    const initial = { ...created, startingSeat: 0, currentPlayerId: 'human' };
+    expect(initial.piles.bloodDiscard).toHaveLength(1);
+
+    const drawing = beginDraw(initial, 'blood', 'discard');
+    const humanDuringDraw = drawing.players.find((player) => player.id === 'human')!;
+    expect(drawing.phase).toBe('draw-decision');
+    expect(humanDuringDraw.stock).toBe(0);
+    expect(getTopDiscard(drawing, 'blood')).toEqual(drawing.pendingDraw?.card);
+
+    const after = finishDraw(drawing, true);
+    expect(after.piles.bloodDiscard).toHaveLength(1);
+    expect(getTopDiscard(after, 'blood')).toBeDefined();
   });
 });

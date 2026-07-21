@@ -401,6 +401,18 @@ export function getCurrentPlayer(state: GameState): Player {
 export function getTopDiscard(state: GameState, family: CardFamily): Card {
   const pile = state.piles[`${family}Discard` as keyof Piles];
   const card = pile[pile.length - 1];
-  if (!card) throw new Error(`${family} discard pile is empty`);
-  return card;
+  if (card) return card;
+
+  // Taking the only visible discard temporarily empties that pile while the
+  // player decides whether to keep it. Keep rendering the drawn card during
+  // that decision instead of crashing the entire React tree.
+  if (
+    state.phase === 'draw-decision'
+    && state.pendingDraw?.source === 'discard'
+    && state.pendingDraw.family === family
+  ) {
+    return state.pendingDraw.card;
+  }
+
+  throw new Error(`${family} discard pile is empty`);
 }
