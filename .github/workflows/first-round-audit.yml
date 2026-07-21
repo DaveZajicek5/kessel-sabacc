@@ -1,4 +1,4 @@
-name: First-round balance audit
+name: AI balance audit
 
 on:
   pull_request:
@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/game/**'
       - 'scripts/audit-first-round.ts'
+      - 'scripts/simulate.ts'
       - 'package.json'
       - '.github/workflows/first-round-audit.yml'
   workflow_dispatch:
@@ -24,7 +25,11 @@ jobs:
       - run: npm install
       - name: Audit 50,000 standard-difficulty first rounds
         run: npm run audit:first-round -- --games 50000 --difficulty standard | tee first-round-audit.txt
+      - name: Audit 20,000 complete standard-difficulty games
+        run: npm run simulate -- --games 20000 --difficulty standard | tee full-game-audit.txt
       - uses: actions/upload-artifact@v4
         with:
-          name: first-round-audit
-          path: first-round-audit.txt
+          name: ai-balance-audit
+          path: |
+            first-round-audit.txt
+            full-game-audit.txt
