@@ -1,0 +1,6 @@
+Traceback (most recent call last):
+  File "/home/runner/work/kessel-sabacc/kessel-sabacc/scripts/apply-gameplay-hotfix.py", line 232, in <module>
+    end = text.index("\n\n});", start)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ValueError: substring not found
+exit_status=1
