@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { executeAiTurn } from './game/ai';
+import { buildDebugReport } from './game/debug';
 import { cardLabel } from './game/deck';
 import {
   beginDraw,
@@ -12,6 +13,7 @@ import {
   stand,
   startNextRound,
 } from './game/engine';
+import { normalizeSeed } from './game/random';
 import type {
   Card,
   CardFamily,
@@ -126,17 +128,25 @@ function RulesPanel({ onClose }: { onClose: () => void }) {
           <div><strong>Round end</strong><p>There are three turns, but the round ends immediately if everyone stands during the same turn.</p></div>
           <div><strong>Tokens</strong><p>Round winners recover only their own invested tokens. Other players’ invested and penalty tokens leave play; they are not awarded to the round winner.</p></div>
           <div><strong>Tiebreaks</strong><p>Lowest difference wins. Equal differences use the lower pair (implemented as the lower card sum). Exact ties create multiple winners.</p></div>
-          <div><strong>Current scope</strong><p>Shift tokens and cheating mechanics are intentionally excluded from this first rules-complete core.</p></div>
+          <div><strong>Diagnostics</strong><p>After each round you can copy a local debug report containing the seed, full deal, AI state and table log. Nothing is transmitted automatically.</p></div>
         </div>
       </section>
     </div>
   );
 }
 
+function seedFromQuery(): number | undefined {
+  const raw = new URLSearchParams(window.location.search).get('seed');
+  if (raw === null || raw.trim() === '') return undefined;
+  const value = Number(raw);
+  return Number.isFinite(value) ? normalizeSeed(value) : undefined;
+}
+
 function SetupScreen({ onStart, onRules }: { onStart: (config: GameConfig) => void; onRules: () => void }) {
   const [opponents, setOpponents] = useState<1 | 2 | 3>(3);
   const [tokens, setTokens] = useState(5);
   const [difficulty, setDifficulty] = useState<GameConfig['difficulty']>('standard');
+  const [replaySeed] = useState(seedFromQuery);
 
   return (
     <main className="setup-screen">
@@ -144,6 +154,7 @@ function SetupScreen({ onStart, onRules }: { onStart: (config: GameConfig) => vo
         <p className="eyebrow">A FAN-MADE BROWSER TABLE</p>
         <h1>KESSEL<br />SABACC</h1>
         <p className="hero-copy">A complete core-rules game against fair-information computer opponents with distinct risk personalities.</p>
+        {replaySeed !== undefined && <p className="replay-seed">Replaying deterministic seed <strong>{replaySeed}</strong>.</p>}
         <div className="setup-controls">
           <label>
             Opponents
@@ -168,7 +179,7 @@ function SetupScreen({ onStart, onRules }: { onStart: (config: GameConfig) => vo
           </label>
         </div>
         <div className="setup-actions">
-          <button className="primary-button" onClick={() => onStart({ opponentCount: opponents, startingTokens: tokens, difficulty })}>Take a seat</button>
+          <button className="primary-button" onClick={() => onStart({ opponentCount: opponents, startingTokens: tokens, difficulty, seed: replaySeed ?? normalizeSeed(Date.now()) })}>Take a seat</button>
           <button className="text-button" onClick={onRules}>Read core rules</button>
         </div>
       </section>
@@ -195,6 +206,7 @@ function GameTable({ state, setState, onExit, onRules }: {
   const reveal = ['resolution-choice', 'round-over', 'game-over'].includes(state.phase);
   const humanTurn = current.isHuman && state.phase === 'player-action';
   const [choices, setChoices] = useState<ImpostorChoices>({});
+  const [debugStatus, setDebugStatus] = useState('');
 
   useEffect(() => {
     if (state.phase !== 'resolution-choice') setChoices({});
@@ -206,6 +218,24 @@ function GameTable({ state, setState, onExit, onRules }: {
   const choicesComplete = (!needsBlood || choices.blood !== undefined) && (!needsSand || choices.sand !== undefined);
   const bloodDiscard = getTopDiscard(state, 'blood');
   const sandDiscard = getTopDiscard(state, 'sand');
+
+  const copyDebugReport = async () => {
+    const report = buildDebugReport(state, window.location.href);
+    try {
+      await navigator.clipboard.writeText(report);
+      setDebugStatus('Debug report copied. It includes hidden cards and the replay seed.');
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = report;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      textarea.remove();
+      setDebugStatus('Debug report copied using browser fallback.');
+    }
+  };
 
   return (
     <main className="game-shell">
@@ -305,7 +335,12 @@ function GameTable({ state, setState, onExit, onRules }: {
             <p className="eyebrow">ROUND {state.round} RESULTS</p>
             <h2>{state.results.filter((result) => result.winner).map((result) => state.players.find((player) => player.id === result.playerId)?.name).join(' & ')} won</h2>
             <div className="results-list">{state.results.map((result) => <ResultLine key={result.playerId} result={result} player={state.players.find((player) => player.id === result.playerId)!} />)}</div>
-            <button className="primary-button" onClick={() => setState((prev) => prev ? startNextRound(prev) : prev)}>Deal next round</button>
+            <p className="debug-seed">Seed: <code>{state.config.seed ?? 'not recorded'}</code></p>
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={copyDebugReport}>Copy debug report</button>
+              <button className="primary-button" onClick={() => setState((prev) => prev ? startNextRound(prev) : prev)}>Deal next round</button>
+            </div>
+            {debugStatus && <p className="debug-status">{debugStatus}</p>}
           </section>
         </div>
       )}
@@ -316,7 +351,12 @@ function GameTable({ state, setState, onExit, onRules }: {
             <p className="eyebrow">GAME OVER</p>
             <h2>{state.players.find((player) => player.id === state.winnerId)?.name} wins the table</h2>
             <div className="results-list">{state.results.map((result) => <ResultLine key={result.playerId} result={result} player={state.players.find((player) => player.id === result.playerId)!} />)}</div>
-            <button className="primary-button" onClick={onExit}>New game</button>
+            <p className="debug-seed">Seed: <code>{state.config.seed ?? 'not recorded'}</code></p>
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={copyDebugReport}>Copy debug report</button>
+              <button className="primary-button" onClick={onExit}>New game</button>
+            </div>
+            {debugStatus && <p className="debug-status">{debugStatus}</p>}
           </section>
         </div>
       )}
