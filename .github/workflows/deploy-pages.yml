@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -19,12 +19,36 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: 22
       - run: npm install
       - run: npm test
       - run: npm run build
+
+      # This repository is currently configured to serve Pages from main/root.
+      # Keep a production build in the repository root so that mode works too.
+      - name: Publish production bundle to repository root
+        run: |
+          rm -rf assets
+          cp -R dist/assets assets
+          cp dist/index.html index.html
+          touch .nojekyll
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- index.html assets .nojekyll
+
+          if git diff --cached --quiet; then
+            echo "Production bundle already current."
+          else
+            git commit -m "Publish GitHub Pages production bundle"
+            git push
+          fi
+
+      # This also supports the preferred Settings > Pages > GitHub Actions mode.
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
