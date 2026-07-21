@@ -14,6 +14,7 @@ import {
 } from './game/engine';
 import type {
   Card,
+  CardFamily,
   GameConfig,
   GameState,
   ImpostorChoices,
@@ -30,6 +31,16 @@ function CardView({ card, hidden = false, compact = false }: { card: Card; hidde
       <span className="card-family">{card.family === 'blood' ? 'BLOOD' : 'SAND'}</span>
       <strong>{card.rank === 'impostor' ? 'I' : card.rank === 'sylop' ? 'S' : card.rank}</strong>
       <span className="card-name">{cardLabel(card)}</span>
+    </div>
+  );
+}
+
+function EmptyDiscardView({ family }: { family: CardFamily }) {
+  return (
+    <div className={`card ${family} compact empty-card`} aria-label={`Empty ${family} discard pile`}>
+      <span className="card-family">{family === 'blood' ? 'BLOOD' : 'SAND'}</span>
+      <strong>—</strong>
+      <span className="card-name">EMPTY</span>
     </div>
   );
 }
@@ -77,6 +88,31 @@ function ResultLine({ result, player }: { result: RoundResult; player: Player })
   );
 }
 
+function DiceOptions({
+  values,
+  selected,
+  onSelect,
+}: {
+  values: [number, number];
+  selected?: number;
+  onSelect: (value: number) => void;
+}) {
+  const uniqueValues = [...new Set(values)];
+  return (
+    <div>
+      {uniqueValues.map((value) => (
+        <button
+          className={selected === value ? 'selected' : ''}
+          key={value}
+          onClick={() => onSelect(value)}
+        >
+          {value}{uniqueValues.length === 1 ? ' ×2' : ''}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function RulesPanel({ onClose }: { onClose: () => void }) {
   return (
     <div className="overlay" role="dialog" aria-modal="true" aria-label="Core rules">
@@ -88,7 +124,7 @@ function RulesPanel({ onClose }: { onClose: () => void }) {
           <div><strong>Goal</strong><p>Finish with the best two-card hand. A matching Blood and Sand value is Sabacc; lower matched values beat higher ones. Two Sylops are unbeatable.</p></div>
           <div><strong>Your turn</strong><p>Stand for free, or spend one token to draw from either family’s hidden draw pile or visible discard pile. Then keep or refuse the card.</p></div>
           <div><strong>Round end</strong><p>There are three turns, but the round ends immediately if everyone stands during the same turn.</p></div>
-          <div><strong>Losses</strong><p>Winners recover invested tokens. Other Sabacc hands lose one extra token; non-Sabacc hands lose tokens equal to their card difference.</p></div>
+          <div><strong>Tokens</strong><p>Round winners recover only their own invested tokens. Other players’ invested and penalty tokens leave play; they are not awarded to the round winner.</p></div>
           <div><strong>Tiebreaks</strong><p>Lowest difference wins. Equal differences use the lower pair (implemented as the lower card sum). Exact ties create multiple winners.</p></div>
           <div><strong>Current scope</strong><p>Shift tokens and cheating mechanics are intentionally excluded from this first rules-complete core.</p></div>
         </div>
@@ -168,6 +204,8 @@ function GameTable({ state, setState, onExit, onRules }: {
   const needsBlood = human.hand.blood.rank === 'impostor';
   const needsSand = human.hand.sand.rank === 'impostor';
   const choicesComplete = (!needsBlood || choices.blood !== undefined) && (!needsSand || choices.sand !== undefined);
+  const bloodDiscard = getTopDiscard(state, 'blood');
+  const sandDiscard = getTopDiscard(state, 'sand');
 
   return (
     <main className="game-shell">
@@ -184,11 +222,11 @@ function GameTable({ state, setState, onExit, onRules }: {
 
         <div className="center-table">
           <div className="pile-group">
-            <button disabled={!humanTurn || human.stock <= 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'blood', 'draw') : prev)} className="draw-stack blood-stack">
+            <button disabled={!humanTurn || human.stock <= 0 || state.piles.bloodDraw.length === 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'blood', 'draw') : prev)} className="draw-stack blood-stack">
               <span>{state.piles.bloodDraw.length}</span><strong>BLOOD DRAW</strong>
             </button>
-            <button disabled={!humanTurn || human.stock <= 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'blood', 'discard') : prev)} className="discard-button">
-              <CardView card={getTopDiscard(state, 'blood')} compact /><span>Take discard</span>
+            <button disabled={!humanTurn || human.stock <= 0 || !bloodDiscard} onClick={() => setState((prev) => prev ? beginDraw(prev, 'blood', 'discard') : prev)} className="discard-button">
+              {bloodDiscard ? <CardView card={bloodDiscard} compact /> : <EmptyDiscardView family="blood" />}<span>{bloodDiscard ? 'Take discard' : 'Discard empty'}</span>
             </button>
           </div>
 
@@ -198,10 +236,10 @@ function GameTable({ state, setState, onExit, onRules }: {
           </div>
 
           <div className="pile-group">
-            <button disabled={!humanTurn || human.stock <= 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'sand', 'discard') : prev)} className="discard-button">
-              <CardView card={getTopDiscard(state, 'sand')} compact /><span>Take discard</span>
+            <button disabled={!humanTurn || human.stock <= 0 || !sandDiscard} onClick={() => setState((prev) => prev ? beginDraw(prev, 'sand', 'discard') : prev)} className="discard-button">
+              {sandDiscard ? <CardView card={sandDiscard} compact /> : <EmptyDiscardView family="sand" />}<span>{sandDiscard ? 'Take discard' : 'Discard empty'}</span>
             </button>
-            <button disabled={!humanTurn || human.stock <= 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'sand', 'draw') : prev)} className="draw-stack sand-stack">
+            <button disabled={!humanTurn || human.stock <= 0 || state.piles.sandDraw.length === 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'sand', 'draw') : prev)} className="draw-stack sand-stack">
               <span>{state.piles.sandDraw.length}</span><strong>SAND DRAW</strong>
             </button>
           </div>
@@ -245,10 +283,16 @@ function GameTable({ state, setState, onExit, onRules }: {
             <p className="eyebrow">IMPOSTOR RESOLUTION</p>
             <h2>Choose your dice value</h2>
             {needsBlood && rolls.blood && (
-              <div className="dice-choice"><strong>Blood Impostor</strong><div>{rolls.blood.map((value) => <button className={choices.blood === value ? 'selected' : ''} key={value} onClick={() => setChoices((currentChoices) => ({ ...currentChoices, blood: value }))}>{value}</button>)}</div></div>
+              <div className="dice-choice">
+                <strong>Blood Impostor</strong>
+                <DiceOptions values={rolls.blood} selected={choices.blood} onSelect={(value) => setChoices((currentChoices) => ({ ...currentChoices, blood: value }))} />
+              </div>
             )}
             {needsSand && rolls.sand && (
-              <div className="dice-choice"><strong>Sand Impostor</strong><div>{rolls.sand.map((value) => <button className={choices.sand === value ? 'selected' : ''} key={value} onClick={() => setChoices((currentChoices) => ({ ...currentChoices, sand: value }))}>{value}</button>)}</div></div>
+              <div className="dice-choice">
+                <strong>Sand Impostor</strong>
+                <DiceOptions values={rolls.sand} selected={choices.sand} onSelect={(value) => setChoices((currentChoices) => ({ ...currentChoices, sand: value }))} />
+              </div>
             )}
             <button className="primary-button" disabled={!choicesComplete} onClick={() => setState((prev) => prev ? finalizeResolution(prev, choices) : prev)}>Resolve hands</button>
           </section>

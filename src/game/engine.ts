@@ -244,7 +244,11 @@ export function beginDraw(state: GameState, family: CardFamily, source: DrawSour
 
   const key = `${family}${source === 'draw' ? 'Draw' : 'Discard'}` as keyof Piles;
   const selected = drawTop(state.piles[key]);
-  const piles = updatePile(state.piles, family, source, selected.rest);
+  // Hidden draws are removed immediately. Visible discards stay on the table
+  // until Keep/Refuse is resolved, so the move is committed atomically.
+  const piles = source === 'draw'
+    ? updatePile(state.piles, family, source, selected.rest)
+    : state.piles;
   const players = state.players.map((candidate) =>
     candidate.id === player.id
       ? { ...candidate, stock: candidate.stock - 1, pot: candidate.pot + 1 }
@@ -274,6 +278,17 @@ export function finishDraw(state: GameState, keep: boolean): GameState {
   let players = state.players;
   let detail: string;
 
+  // Remove a visible discard only when the player actually keeps it.
+  // Refusing it leaves the pile unchanged.
+  if (pending.source === 'discard' && keep) {
+    const key = `${pending.family}Discard` as keyof Piles;
+    const top = drawTop(piles[key]);
+    if (top.card.id !== pending.card.id) {
+      throw new Error('Visible discard changed before the draw was resolved');
+    }
+    piles = updatePile(piles, pending.family, 'discard', top.rest);
+  }
+
   if (keep) {
     const replaced = player.hand[pending.family];
     piles = addToDiscard(piles, replaced);
@@ -286,8 +301,12 @@ export function finishDraw(state: GameState, keep: boolean): GameState {
       ? `${player.name} takes the visible ${cardLabel(pending.card)}.`
       : `${player.name} keeps the hidden card and discards ${cardLabel(replaced)}.`;
   } else {
-    piles = addToDiscard(piles, pending.card);
-    detail = `${player.name} refuses the card; ${cardLabel(pending.card)} is now visible.`;
+    if (pending.source === 'draw') {
+      piles = addToDiscard(piles, pending.card);
+      detail = `${player.name} refuses the hidden card; ${cardLabel(pending.card)} is now visible.`;
+    } else {
+      detail = `${player.name} leaves the visible ${cardLabel(pending.card)} on the discard pile.`;
+    }
   }
 
   return completeAction(
@@ -398,21 +417,7 @@ export function getCurrentPlayer(state: GameState): Player {
   return player;
 }
 
-export function getTopDiscard(state: GameState, family: CardFamily): Card {
+export function getTopDiscard(state: GameState, family: CardFamily): Card | undefined {
   const pile = state.piles[`${family}Discard` as keyof Piles];
-  const card = pile[pile.length - 1];
-  if (card) return card;
-
-  // Taking the only visible discard temporarily empties that pile while the
-  // player decides whether to keep it. Keep rendering the drawn card during
-  // that decision instead of crashing the entire React tree.
-  if (
-    state.phase === 'draw-decision'
-    && state.pendingDraw?.source === 'discard'
-    && state.pendingDraw.family === family
-  ) {
-    return state.pendingDraw.card;
-  }
-
-  throw new Error(`${family} discard pile is empty`);
+  return pile[pile.length - 1];
 }
