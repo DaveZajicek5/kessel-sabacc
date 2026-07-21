@@ -16,14 +16,4 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
       - name: Show patch failure
-        run: |
-          awk '
-            /python <<'"'"'PY'"'"'/ { capture=1; next }
-            capture && /^          PY$/ { capture=0; exit }
-            capture { sub(/^          /, ""); print }
-          ' .github/workflows/apply-hotfix.yml > /tmp/apply-hotfix.py
-          set +e
-          python /tmp/apply-hotfix.py > /tmp/hotfix.log 2>&1
-          status=$?
-          tail -n 20 /tmp/hotfix.log
-          exit $status
+        run: bash scripts/diagnose-hotfix.sh
