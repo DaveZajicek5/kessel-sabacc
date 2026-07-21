@@ -23,4 +23,8 @@ jobs:
           node-version: 22
       - run: npm install
       - name: Audit 50,000 standard-difficulty first rounds
-        run: npm run audit:first-round -- --games 50000 --difficulty standard
+        run: npm run audit:first-round -- --games 50000 --difficulty standard | tee first-round-audit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: first-round-audit
+          path: first-round-audit.txt
