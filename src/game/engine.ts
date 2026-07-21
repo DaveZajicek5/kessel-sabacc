@@ -237,13 +237,65 @@ export function stand(state: GameState): GameState {
   );
 }
 
+export function takeDiscard(state: GameState, family: CardFamily): GameState {
+  if (state.phase !== 'player-action') return state;
+  const player = state.players.find((candidate) => candidate.id === state.currentPlayerId);
+  if (!player || player.stock <= 0) return player ? stand(state) : state;
+
+  const key = `${family}Discard` as keyof Piles;
+  const pile = state.piles[key];
+  const visible = pile[pile.length - 1];
+  if (!visible) {
+    return {
+      ...state,
+      log: [...state.log, `${player.name} could not take the ${family} discard because the pile was empty.`].slice(-60),
+    };
+  }
+
+  const replaced = player.hand[family];
+  const piles: Piles = {
+    ...state.piles,
+    [key]: [...pile.slice(0, -1), replaced],
+  };
+  const players = state.players.map((candidate) =>
+    candidate.id === player.id
+      ? {
+          ...candidate,
+          stock: candidate.stock - 1,
+          pot: candidate.pot + 1,
+          hand: { ...candidate.hand, [family]: visible },
+        }
+      : candidate,
+  );
+
+  return completeAction(
+    {
+      ...state,
+      players,
+      piles,
+      log: [
+        ...state.log,
+        `${player.name} spends a token, takes the visible ${family} ${cardLabel(visible)}, and discards ${cardLabel(replaced)}.`,
+      ].slice(-60),
+    },
+    'draw',
+  );
+}
+
 export function beginDraw(state: GameState, family: CardFamily, source: DrawSource): GameState {
   if (state.phase !== 'player-action') return state;
   const player = state.players.find((candidate) => candidate.id === state.currentPlayerId);
   if (!player || player.stock <= 0) return stand(state);
 
   const key = `${family}${source === 'draw' ? 'Draw' : 'Discard'}` as keyof Piles;
-  const selected = drawTop(state.piles[key]);
+  const sourcePile = state.piles[key];
+  if (sourcePile.length === 0) {
+    return {
+      ...state,
+      log: [...state.log, `${player.name} could not draw because the ${family} ${source} pile was empty.`].slice(-60),
+    };
+  }
+  const selected = drawTop(sourcePile);
   // Hidden draws are removed immediately. Visible discards stay on the table
   // until Keep/Refuse is resolved, so the move is committed atomically.
   const piles = source === 'draw'

@@ -1,5 +1,5 @@
 import { createFamilyDeck } from './deck';
-import { beginDraw, finishDraw, getCurrentPlayer, getTopDiscard, stand } from './engine';
+import { beginDraw, finishDraw, getCurrentPlayer, getTopDiscard, stand, takeDiscard } from './engine';
 import { nextRandom, randomInt } from './random';
 import { handStrength } from './scoring';
 import type {
@@ -191,7 +191,11 @@ export function executeAiTurn(state: GameState): GameState {
     });
   }
 
-  next = beginDraw(next, choice.decision.family!, choice.decision.source!);
+  if (choice.decision.source === 'discard') {
+    return takeDiscard(next, choice.decision.family!);
+  }
+
+  next = beginDraw(next, choice.decision.family!, 'draw');
   const keepChoice = chooseAiKeep(next);
   next = { ...next, randomState: keepChoice.randomState };
   return finishDraw(next, keepChoice.keep);
