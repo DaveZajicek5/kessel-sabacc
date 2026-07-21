@@ -1,6 +1,7 @@
 import { Component, StrictMode, type ErrorInfo, type ReactNode } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App';
+import { BUILD_ID } from './build';
 import { buildCrashReport, copyDebugText } from './game/debug';
 import './styles.css';
 
@@ -21,7 +22,7 @@ class GameErrorBoundary extends Component<{ children: ReactNode }, { error: Erro
       return (
         <main className="setup-screen">
           <section className="hero-panel">
-            <p className="eyebrow">TABLE MALFUNCTION</p>
+            <p className="eyebrow">TABLE MALFUNCTION · {BUILD_ID}</p>
             <h1>The game hit an unexpected error.</h1>
             <p>Your browser is fine. Reloading starts a fresh table instead of leaving you with a blank screen.</p>
             <div className="modal-actions crash-actions">

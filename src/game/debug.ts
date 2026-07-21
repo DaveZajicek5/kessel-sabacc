@@ -1,3 +1,4 @@
+import { BUILD_ID } from '../build';
 import { cardLabel } from './deck';
 import type { Card, GameState } from './types';
 
@@ -18,6 +19,7 @@ export function buildDebugReport(state: GameState, pageUrl?: string): string {
 
   const report = {
     format: 'kessel-sabacc-debug-v1',
+    buildId: BUILD_ID,
     generatedAt: new Date().toISOString(),
     replayUrl,
     config: state.config,
@@ -107,4 +109,32 @@ export async function copyDebugText(text: string): Promise<void> {
     document.execCommand('copy');
     textarea.remove();
   }
+}
+
+
+export function buildActionIncidentReport(
+  state: GameState,
+  action: Record<string, unknown>,
+  error: Error,
+  pageUrl?: string,
+): string {
+  let stateSnapshot: unknown;
+  try {
+    stateSnapshot = JSON.parse(buildDebugReport(state, pageUrl));
+  } catch {
+    stateSnapshot = { unavailable: true };
+  }
+
+  return JSON.stringify({
+    format: 'kessel-sabacc-action-incident-v1',
+    buildId: BUILD_ID,
+    generatedAt: new Date().toISOString(),
+    action,
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+    },
+    stateBeforeAction: stateSnapshot,
+  }, null, 2);
 }

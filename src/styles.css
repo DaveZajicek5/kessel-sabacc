@@ -140,3 +140,7 @@ button:disabled { cursor: not-allowed; opacity: 0.42; }
 
 .header-actions { display: flex; align-items: center; gap: 0.7rem; }
 .crash-actions { justify-content: flex-start; flex-wrap: wrap; margin-top: 1rem; }
+
+
+.build-id { opacity: 0.55; font-size: 0.68rem; font-family: ui-monospace, monospace; }
+.incident-modal pre { max-height: 14rem; overflow: auto; white-space: pre-wrap; font-size: 0.7rem; }

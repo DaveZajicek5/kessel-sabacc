@@ -1,8 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BUILD_ID } from './build';
 import { executeAiTurn } from './game/ai';
-import { buildDebugReport, copyDebugText, persistDebugState } from './game/debug';
+import { buildActionIncidentReport, buildDebugReport, copyDebugText, persistDebugState } from './game/debug';
 import { cardLabel } from './game/deck';
 import {
+  assertValidGameState,
   beginDraw,
   createGame,
   finalizeResolution,
@@ -208,6 +210,8 @@ function GameTable({ state, setState, onExit, onRules }: {
   const humanTurn = current.isHuman && state.phase === 'player-action';
   const [choices, setChoices] = useState<ImpostorChoices>({});
   const [debugStatus, setDebugStatus] = useState('');
+  const [incidentReport, setIncidentReport] = useState<string | null>(null);
+  const actionLock = useRef(false);
 
   useEffect(() => {
     if (state.phase !== 'resolution-choice') setChoices({});
@@ -226,12 +230,36 @@ function GameTable({ state, setState, onExit, onRules }: {
     window.setTimeout(() => setDebugStatus(''), 1800);
   };
 
+  const performDiscardSwap = (family: CardFamily) => {
+    if (actionLock.current) return;
+    actionLock.current = true;
+    const before = state;
+    persistDebugState(before, window.location.href);
+
+    try {
+      const next = takeDiscard(before, family);
+      assertValidGameState(next);
+      setState(next);
+    } catch (cause) {
+      const error = cause instanceof Error ? cause : new Error(String(cause));
+      setIncidentReport(buildActionIncidentReport(
+        before,
+        { kind: 'take-visible-discard', family },
+        error,
+        window.location.href,
+      ));
+    } finally {
+      window.setTimeout(() => { actionLock.current = false; }, 0);
+    }
+  };
+
   return (
     <main className="game-shell">
       <header className="game-header">
         <button className="brand-button" onClick={onExit}>KESSEL SABACC</button>
         <div className="round-status"><span>ROUND {state.round}</span><strong>TURN {state.turn} / 3</strong></div>
         <div className="header-actions">
+          <small className="build-id">{BUILD_ID}</small>
           <button className="text-button" onClick={copyDebugReport}>{debugStatus || 'Copy debug'}</button>
           <button className="text-button" onClick={onRules}>Rules</button>
         </div>
@@ -247,7 +275,7 @@ function GameTable({ state, setState, onExit, onRules }: {
             <button disabled={!humanTurn || human.stock <= 0 || state.piles.bloodDraw.length === 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'blood', 'draw') : prev)} className="draw-stack blood-stack">
               <span>{state.piles.bloodDraw.length}</span><strong>BLOOD DRAW</strong>
             </button>
-            <button disabled={!humanTurn || human.stock <= 0 || !bloodDiscard} onClick={() => setState((prev) => prev ? takeDiscard(prev, 'blood') : prev)} className="discard-button">
+            <button disabled={!humanTurn || human.stock <= 0 || !bloodDiscard} onClick={() => performDiscardSwap('blood')} className="discard-button">
               {bloodDiscard ? <CardView card={bloodDiscard} compact /> : <EmptyDiscardView family="blood" />}<span>{bloodDiscard ? 'Swap discard · 1 token' : 'Discard empty'}</span>
             </button>
           </div>
@@ -258,7 +286,7 @@ function GameTable({ state, setState, onExit, onRules }: {
           </div>
 
           <div className="pile-group">
-            <button disabled={!humanTurn || human.stock <= 0 || !sandDiscard} onClick={() => setState((prev) => prev ? takeDiscard(prev, 'sand') : prev)} className="discard-button">
+            <button disabled={!humanTurn || human.stock <= 0 || !sandDiscard} onClick={() => performDiscardSwap('sand')} className="discard-button">
               {sandDiscard ? <CardView card={sandDiscard} compact /> : <EmptyDiscardView family="sand" />}<span>{sandDiscard ? 'Swap discard · 1 token' : 'Discard empty'}</span>
             </button>
             <button disabled={!humanTurn || human.stock <= 0 || state.piles.sandDraw.length === 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'sand', 'draw') : prev)} className="draw-stack sand-stack">
@@ -295,6 +323,25 @@ function GameTable({ state, setState, onExit, onRules }: {
               <button className="secondary-button" onClick={() => setState((prev) => prev ? finishDraw(prev, false) : prev)}>Refuse</button>
               <button className="primary-button" onClick={() => setState((prev) => prev ? finishDraw(prev, true) : prev)}>Keep card</button>
             </div>
+          </section>
+        </div>
+      )}
+
+
+      {incidentReport && (
+        <div className="overlay" role="dialog" aria-modal="true" aria-label="Discard action incident">
+          <section className="modal incident-modal">
+            <p className="eyebrow">ACTION BLOCKED</p>
+            <h2>The discard swap failed safely.</h2>
+            <p>The table was left exactly as it was before the click. Copy the report and send it to the developer.</p>
+            <div className="modal-actions">
+              <button className="secondary-button" onClick={() => copyDebugText(incidentReport)}>Copy incident report</button>
+              <button className="primary-button" onClick={() => setIncidentReport(null)}>Return to table</button>
+            </div>
+            <details>
+              <summary>Technical detail</summary>
+              <pre>{incidentReport}</pre>
+            </details>
           </section>
         </div>
       )}
