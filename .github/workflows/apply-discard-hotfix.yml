@@ -1,0 +1,32 @@
+name: Apply discard hotfix
+
+on:
+  push:
+    branches: [agent/discard-direct-swap-and-crash-report]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/discard-direct-swap-and-crash-report
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply source changes
+        run: python scripts/apply-discard-hotfix.py
+      - run: npm install
+      - run: npm test
+      - run: npm run build
+      - name: Commit validated hotfix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.tsx src/main.tsx src/styles.css src/game/ai.ts src/game/debug.ts src/game/engine.ts src/game/__tests__/engine.test.ts
+          git commit -m "Replace discard decision overlay with atomic swaps"
+          git push
