@@ -1,0 +1,32 @@
+name: Apply debug report UI
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.head_ref == 'agent/first-round-audit-and-debug-log' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply browser debug UI
+        run: node scripts/apply-debug-ui.mjs
+      - run: npm install
+      - run: npm test
+      - run: npm run build
+      - name: Commit browser debug UI
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/App.tsx
+          git commit -m "Add reproducible browser debug reports"
+          git push
