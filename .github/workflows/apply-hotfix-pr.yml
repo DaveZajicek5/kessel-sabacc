@@ -1,4 +1,4 @@
-name: Persist gameplay hotfix error
+name: Apply gameplay hotfix
 
 on:
   pull_request:
@@ -8,25 +8,28 @@ permissions:
   contents: write
 
 jobs:
-  diagnose:
+  apply:
     if: github.head_ref == 'agent/atomic-discard-and-impostor-ui'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.head_ref }}
-      - name: Save patch error
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Apply source hotfix
         run: |
-          if [ -f hotfix-error.txt ]; then
-            echo "Diagnostic already saved."
-            exit 0
-          fi
-          set +e
-          python scripts/apply-gameplay-hotfix.py > hotfix-error.txt 2>&1
-          status=$?
-          echo "exit_status=$status" >> hotfix-error.txt
+          sed -i 's/end = text.index("\\n\\n});", start)/end = text.rindex("\\n});")/' scripts/apply-gameplay-hotfix.py
+          python scripts/apply-gameplay-hotfix.py
+      - run: npm install
+      - run: npm test
+      - run: npm run build
+      - name: Commit hotfix
+        run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add hotfix-error.txt
-          git commit -m "Save gameplay hotfix diagnostic"
+          git rm .github/workflows/apply-hotfix.yml .github/workflows/apply-hotfix-pr.yml scripts/apply-gameplay-hotfix.py scripts/diagnose-hotfix.sh hotfix-error.txt
+          git add src/App.tsx src/game/engine.ts src/game/ai.ts src/game/__tests__/engine.test.ts
+          git commit -m "Make discard draws atomic and clarify Impostor doubles"
           git push
