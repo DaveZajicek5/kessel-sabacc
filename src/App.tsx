@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { executeAiTurn } from './game/ai';
-import { buildDebugReport } from './game/debug';
+import { buildDebugReport, copyDebugText, persistDebugState } from './game/debug';
 import { cardLabel } from './game/deck';
 import {
   beginDraw,
@@ -12,6 +12,7 @@ import {
   humanNeedsImpostorChoice,
   stand,
   startNextRound,
+  takeDiscard,
 } from './game/engine';
 import { normalizeSeed } from './game/random';
 import type {
@@ -124,7 +125,7 @@ function RulesPanel({ onClose }: { onClose: () => void }) {
         <h2>How this table plays</h2>
         <div className="rules-grid">
           <div><strong>Goal</strong><p>Finish with the best two-card hand. A matching Blood and Sand value is Sabacc; lower matched values beat higher ones. Two Sylops are unbeatable.</p></div>
-          <div><strong>Your turn</strong><p>Stand for free, or spend one token to draw from either family’s hidden draw pile or visible discard pile. Then keep or refuse the card.</p></div>
+          <div><strong>Your turn</strong><p>Stand for free, spend one token to inspect a hidden draw and keep or refuse it, or swap a visible discard directly for your same-family card.</p></div>
           <div><strong>Round end</strong><p>There are three turns, but the round ends immediately if everyone stands during the same turn.</p></div>
           <div><strong>Tokens</strong><p>Round winners recover only their own invested tokens. Other players’ invested and penalty tokens leave play; they are not awarded to the round winner.</p></div>
           <div><strong>Tiebreaks</strong><p>Lowest difference wins. Equal differences use the lower pair (implemented as the lower card sum). Exact ties create multiple winners.</p></div>
@@ -220,21 +221,9 @@ function GameTable({ state, setState, onExit, onRules }: {
   const sandDiscard = getTopDiscard(state, 'sand');
 
   const copyDebugReport = async () => {
-    const report = buildDebugReport(state, window.location.href);
-    try {
-      await navigator.clipboard.writeText(report);
-      setDebugStatus('Debug report copied. It includes hidden cards and the replay seed.');
-    } catch {
-      const textarea = document.createElement('textarea');
-      textarea.value = report;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand('copy');
-      textarea.remove();
-      setDebugStatus('Debug report copied using browser fallback.');
-    }
+    await copyDebugText(buildDebugReport(state, window.location.href));
+    setDebugStatus('Copied');
+    window.setTimeout(() => setDebugStatus(''), 1800);
   };
 
   return (
@@ -242,7 +231,10 @@ function GameTable({ state, setState, onExit, onRules }: {
       <header className="game-header">
         <button className="brand-button" onClick={onExit}>KESSEL SABACC</button>
         <div className="round-status"><span>ROUND {state.round}</span><strong>TURN {state.turn} / 3</strong></div>
-        <button className="text-button" onClick={onRules}>Rules</button>
+        <div className="header-actions">
+          <button className="text-button" onClick={copyDebugReport}>{debugStatus || 'Copy debug'}</button>
+          <button className="text-button" onClick={onRules}>Rules</button>
+        </div>
       </header>
 
       <section className="table-surface">
@@ -255,8 +247,8 @@ function GameTable({ state, setState, onExit, onRules }: {
             <button disabled={!humanTurn || human.stock <= 0 || state.piles.bloodDraw.length === 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'blood', 'draw') : prev)} className="draw-stack blood-stack">
               <span>{state.piles.bloodDraw.length}</span><strong>BLOOD DRAW</strong>
             </button>
-            <button disabled={!humanTurn || human.stock <= 0 || !bloodDiscard} onClick={() => setState((prev) => prev ? beginDraw(prev, 'blood', 'discard') : prev)} className="discard-button">
-              {bloodDiscard ? <CardView card={bloodDiscard} compact /> : <EmptyDiscardView family="blood" />}<span>{bloodDiscard ? 'Take discard' : 'Discard empty'}</span>
+            <button disabled={!humanTurn || human.stock <= 0 || !bloodDiscard} onClick={() => setState((prev) => prev ? takeDiscard(prev, 'blood') : prev)} className="discard-button">
+              {bloodDiscard ? <CardView card={bloodDiscard} compact /> : <EmptyDiscardView family="blood" />}<span>{bloodDiscard ? 'Swap discard · 1 token' : 'Discard empty'}</span>
             </button>
           </div>
 
@@ -266,8 +258,8 @@ function GameTable({ state, setState, onExit, onRules }: {
           </div>
 
           <div className="pile-group">
-            <button disabled={!humanTurn || human.stock <= 0 || !sandDiscard} onClick={() => setState((prev) => prev ? beginDraw(prev, 'sand', 'discard') : prev)} className="discard-button">
-              {sandDiscard ? <CardView card={sandDiscard} compact /> : <EmptyDiscardView family="sand" />}<span>{sandDiscard ? 'Take discard' : 'Discard empty'}</span>
+            <button disabled={!humanTurn || human.stock <= 0 || !sandDiscard} onClick={() => setState((prev) => prev ? takeDiscard(prev, 'sand') : prev)} className="discard-button">
+              {sandDiscard ? <CardView card={sandDiscard} compact /> : <EmptyDiscardView family="sand" />}<span>{sandDiscard ? 'Swap discard · 1 token' : 'Discard empty'}</span>
             </button>
             <button disabled={!humanTurn || human.stock <= 0 || state.piles.sandDraw.length === 0} onClick={() => setState((prev) => prev ? beginDraw(prev, 'sand', 'draw') : prev)} className="draw-stack sand-stack">
               <span>{state.piles.sandDraw.length}</span><strong>SAND DRAW</strong>
@@ -367,6 +359,10 @@ function GameTable({ state, setState, onExit, onRules }: {
 export default function App() {
   const [state, setState] = useState<GameState | null>(null);
   const [showRules, setShowRules] = useState(false);
+
+  useEffect(() => {
+    if (state) persistDebugState(state, window.location.href);
+  }, [state]);
 
   useEffect(() => {
     if (!state || state.phase !== 'player-action') return;

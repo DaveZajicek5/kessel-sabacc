@@ -57,3 +57,54 @@ export function buildDebugReport(state: GameState, pageUrl?: string): string {
 
   return JSON.stringify(report, null, 2);
 }
+
+
+const LAST_STATE_KEY = 'kessel-sabacc:last-debug-state-v1';
+
+export function persistDebugState(state: GameState, pageUrl?: string): void {
+  try {
+    window.sessionStorage.setItem(LAST_STATE_KEY, buildDebugReport(state, pageUrl));
+  } catch {
+    // Diagnostics must never interfere with play.
+  }
+}
+
+export function buildCrashReport(error: Error, componentStack?: string): string {
+  let lastState: unknown;
+  try {
+    const raw = window.sessionStorage.getItem(LAST_STATE_KEY);
+    lastState = raw ? JSON.parse(raw) : undefined;
+  } catch {
+    lastState = undefined;
+  }
+
+  return JSON.stringify({
+    format: 'kessel-sabacc-crash-v1',
+    generatedAt: new Date().toISOString(),
+    pageUrl: window.location.href,
+    userAgent: window.navigator.userAgent,
+    error: {
+      name: error.name,
+      message: error.message,
+      stack: error.stack,
+      componentStack,
+    },
+    lastState,
+  }, null, 2);
+}
+
+export async function copyDebugText(text: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return;
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+  }
+}

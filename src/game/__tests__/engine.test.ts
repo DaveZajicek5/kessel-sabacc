@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { beginDraw, createGame, finishDraw, getTopDiscard, stand } from '../engine';
+import { beginDraw, createGame, finishDraw, getTopDiscard, stand, takeDiscard } from '../engine';
 
 describe('game engine', () => {
   it('builds 22-card family decks into valid opening piles', () => {
@@ -59,4 +59,35 @@ describe('game engine', () => {
     expect(after.piles.sandDiscard).toHaveLength(1);
     expect(getTopDiscard(after, 'sand')).toEqual(visible);
   });
+
+  it.each(['blood', 'sand'] as const)('atomically swaps the visible %s discard with the final token', (family) => {
+    const created = createGame({ opponentCount: 1, startingTokens: 1, difficulty: 'standard', seed: 31 });
+    const initial = { ...created, startingSeat: 0, currentPlayerId: 'human' };
+    const visible = getTopDiscard(initial, family)!;
+    const oldCard = initial.players.find((player) => player.id === 'human')!.hand[family];
+
+    const after = takeDiscard(initial, family);
+    const human = after.players.find((player) => player.id === 'human')!;
+
+    expect(human.stock).toBe(0);
+    expect(human.pot).toBe(1);
+    expect(human.hand[family]).toEqual(visible);
+    expect(getTopDiscard(after, family)).toEqual(oldCard);
+    expect(after.pendingDraw).toBeUndefined();
+    expect(after.phase).not.toBe('draw-decision');
+  });
+
+  it.each(['blood', 'sand'] as const)('does not throw on an empty %s discard', (family) => {
+    const created = createGame({ opponentCount: 1, startingTokens: 2, difficulty: 'standard', seed: 32 });
+    const initial = {
+      ...created,
+      startingSeat: 0,
+      currentPlayerId: 'human',
+      piles: { ...created.piles, [`${family}Discard`]: [] },
+    };
+
+    expect(() => takeDiscard(initial, family)).not.toThrow();
+    expect(takeDiscard(initial, family).phase).toBe('player-action');
+  });
+
 });
