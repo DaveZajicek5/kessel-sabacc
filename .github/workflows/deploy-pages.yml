@@ -27,19 +27,26 @@ jobs:
       - run: npm install
       - run: npm test
       - run: npm run build
+      - name: Create immutable release path
+        run: |
+          mkdir -p dist/releases/2026-07-27-discard-guard-2
+          cp dist/index.html dist/releases/2026-07-27-discard-guard-2/index.html
+          cp -R dist/assets dist/releases/2026-07-27-discard-guard-2/assets
 
       # This repository is currently configured to serve Pages from main/root.
       # Keep a production build in the repository root so that mode works too.
       - name: Publish production bundle to repository root
         run: |
-          rm -rf assets
+          rm -rf assets releases/2026-07-27-discard-guard-2
           cp -R dist/assets assets
           cp dist/index.html index.html
+          mkdir -p releases
+          cp -R dist/releases/2026-07-27-discard-guard-2 releases/2026-07-27-discard-guard-2
           touch .nojekyll
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A -- index.html assets .nojekyll
+          git add -A -- index.html assets releases .nojekyll
 
           if git diff --cached --quiet; then
             echo "Production bundle already current."
