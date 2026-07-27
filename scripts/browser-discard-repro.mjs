@@ -42,12 +42,13 @@ try {
 
       try {
         await page.goto(`${baseUrl}/?seed=${seed}`, { waitUntil: 'networkidle', timeout: 15_000 });
-        const setupText = await page.locator('#root').innerText();
-        if (!setupText.includes('2026.07.27-pipeline-fix-3')) {
-          throw new Error('Browser preview did not load the pipeline-fix build');
-        }
         await page.getByRole('button', { name: 'Take a seat' }).click();
         await page.getByText('Your move', { exact: true }).waitFor({ state: 'visible', timeout: 10_000 });
+
+        const tableText = await page.locator('#root').innerText();
+        if (!tableText.includes('2026.07.27-pipeline-fix-3')) {
+          throw new Error('Browser table did not load the pipeline-fix build');
+        }
 
         const discard = page.locator('.discard-button').nth(family === 'blood' ? 0 : 1);
         await discard.waitFor({ state: 'visible', timeout: 5_000 });
