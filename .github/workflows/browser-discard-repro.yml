@@ -3,6 +3,8 @@ name: Browser discard reproduction
 on:
   push:
     branches: [agent/browser-discard-repro]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
