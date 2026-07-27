@@ -1,0 +1,39 @@
+name: Browser discard reproduction
+
+on:
+  push:
+    branches: [agent/browser-discard-repro]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-discard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm install --no-save playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start production preview
+        run: |
+          nohup npx vite preview --host 127.0.0.1 --port 4173 > /tmp/kessel-vite.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:4173/ >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/kessel-vite.log
+          exit 1
+      - name: Sweep visible discard actions
+        env:
+          SEEDS: 100
+        run: node scripts/browser-discard-repro.mjs
+      - name: Print preview log on failure
+        if: failure()
+        run: cat /tmp/kessel-vite.log || true
