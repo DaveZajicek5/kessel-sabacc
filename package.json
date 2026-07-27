@@ -4,8 +4,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/prepare-index.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/prepare-index.mjs",
     "build": "tsc -b && vite build",
+    "postbuild": "node scripts/verify-build.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
     "simulate": "tsx scripts/simulate.ts",
