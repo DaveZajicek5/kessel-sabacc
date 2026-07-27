@@ -1,0 +1,50 @@
+name: Browser verify pipeline fix
+
+on:
+  push:
+    branches: [agent/browser-verify-pipeline-fix]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-discard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm install --no-save playwright@1.55.0
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: Start production preview
+        run: |
+          nohup npx vite preview --host 127.0.0.1 --port 4173 > /tmp/kessel-vite.log 2>&1 &
+          for attempt in {1..30}; do
+            curl --fail --silent http://127.0.0.1:4173/ >/dev/null && exit 0
+            sleep 1
+          done
+          cat /tmp/kessel-vite.log
+          exit 1
+      - name: Sweep current visible discard build
+        env:
+          SEEDS: 100
+        run: node scripts/browser-discard-repro.mjs
+      - name: Upload verification diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-pipeline-fix-verification
+          path: |
+            browser-discard-result.json
+            browser-discard-failure.png
+          if-no-files-found: warn
+      - name: Print preview log on failure
+        if: failure()
+        run: cat /tmp/kessel-vite.log || true
