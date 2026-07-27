@@ -1,1 +1,1 @@
-export const BUILD_ID = '2026.07.21-discard-guard-1';
+export const BUILD_ID = '2026.07.27-discard-guard-2';
