@@ -1,9 +1,21 @@
+import { writeFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 const baseUrl = process.env.BASE_URL ?? 'http://127.0.0.1:4173';
 const seeds = Number(process.env.SEEDS ?? 100);
 const families = ['blood', 'sand'];
 const failures = [];
+
+function saveResult(status, extra = {}) {
+  writeFileSync('browser-discard-result.json', JSON.stringify({
+    status,
+    baseUrl,
+    seeds,
+    testedFamilies: families,
+    failures,
+    ...extra,
+  }, null, 2));
+}
 
 const browser = await chromium.launch({ headless: true });
 
@@ -22,7 +34,7 @@ try {
         if (message.type() === 'error') consoleErrors.push(message.text());
       });
 
-      // Keep the real ordering semantics but make AI waits short enough for a seed sweep.
+      // Keep ordering semantics while shortening AI delays for the seed sweep.
       await page.addInitScript(() => {
         const nativeSetTimeout = window.setTimeout.bind(window);
         window.setTimeout = ((handler, timeout = 0, ...args) =>
@@ -50,7 +62,7 @@ try {
         const blank = after.trim().length === 0;
 
         if (pageErrors.length || incident || malfunction || blank) {
-          failures.push({
+          const failure = {
             family,
             seed,
             pageErrors,
@@ -58,22 +70,41 @@ try {
             incident,
             malfunction,
             blank,
-            before: before.slice(0, 1500),
-            after: after.slice(0, 1500),
+            before: before.slice(0, 4000),
+            after: after.slice(0, 4000),
+            body: body.slice(0, 6000),
             url: page.url(),
-          });
-          console.error(JSON.stringify(failures.at(-1), null, 2));
+          };
+          failures.push(failure);
+          await page.screenshot({ path: 'browser-discard-failure.png', fullPage: true }).catch(() => {});
+          saveResult('failure', { failure });
+          console.error(JSON.stringify(failure, null, 2));
           throw new Error(`Browser discard failure for ${family}, seed ${seed}`);
         }
+      } catch (error) {
+        if (failures.length === 0) {
+          const failure = {
+            family,
+            seed,
+            harnessError: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+            pageErrors,
+            consoleErrors,
+            url: page.url(),
+          };
+          failures.push(failure);
+          await page.screenshot({ path: 'browser-discard-failure.png', fullPage: true }).catch(() => {});
+          saveResult('failure', { failure });
+        }
+        throw error;
       } finally {
         await context.close();
       }
     }
     console.log(`${family}: ${seeds} browser discard actions passed`);
   }
+
+  saveResult('success', { totalActions: seeds * families.length });
+  console.log(`All ${seeds * families.length} browser discard actions passed.`);
 } finally {
   await browser.close();
 }
-
-if (failures.length) process.exit(1);
-console.log(`All ${seeds * families.length} browser discard actions passed.`);
